@@ -14,41 +14,20 @@ import {
   Pressable,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { NavigationContainer } from "@react-navigation/native";
 
 const { width, height } = Dimensions.get("window");
+const Tab = createBottomTabNavigator();
 
-export default function NotesApp() {
-  const [notes, setNotes] = useState([
-    { 
-      id: "1", 
-      title: "The Benefits of Meditation", 
-      content: "Meditation is a practice that offers numerous benefits...", 
-      tags: ["Wellness", "Health"], 
-      category: "Personal",
-      pinned: false,
-      archived: false
-    },
-    { 
-      id: "2", 
-      title: "The Importance of Goals", 
-      content: "Setting goals is key to achieving success in any area of life...", 
-      tags: ["Productivity", "Success"], 
-      category: "Work",
-      pinned: true,
-      archived: false
-    },
-    { 
-      id: "3", 
-      title: "The History of Coffee", 
-      content: "Coffee is one of the most popular beverages worldwide with a rich history...", 
-      tags: ["History", "Food"], 
-      category: "Research",
-      pinned: false,
-      archived: false
-    },
-  ]);
-
+// Main Notes Screen Component
+function NotesScreen({ 
+  notes, 
+  setNotes, 
+  darkMode, 
+  setDarkMode 
+}) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isModalVisible, setModalVisible] = useState(false);
@@ -58,20 +37,18 @@ export default function NotesApp() {
   const [newNoteContent, setNewNoteContent] = useState("");
   const [newNoteTags, setNewNoteTags] = useState("");
   const [newNoteCategory, setNewNoteCategory] = useState("Personal");
-  const [darkMode, setDarkMode] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [selectedTags, setSelectedTags] = useState([]);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
   const [showTagsModal, setShowTagsModal] = useState(false);
-  const [archivedNotes, setArchivedNotes] = useState(false);
 
   // Available categories and tags
   const categories = ["All", "Personal", "Work", "Research", "Ideas"];
   const allTags = ["Wellness", "Health", "Productivity", "Success", "History", "Food", "Urgent", "Important"];
 
-  // Filter notes based on search, category, tags, and archive status
+  // Filter notes based on search, category, tags, and deleted status
   const filteredNotes = notes.filter((note) => {
-    if (note.archived !== archivedNotes) return false;
+    if (note.deleted) return false;
     
     const matchesSearch = 
       note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -103,7 +80,8 @@ export default function NotesApp() {
         tags: newNoteTags.split(',').map(tag => tag.trim()).filter(tag => tag),
         category: newNoteCategory,
         pinned: false,
-        archived: false
+        archived: false,
+        deleted: false
       };
       setNotes([newNote, ...notes]);
       resetModal();
@@ -139,7 +117,9 @@ export default function NotesApp() {
           text: "Delete", 
           style: "destructive",
           onPress: () => {
-            setNotes(notes.filter(note => note.id !== id));
+            setNotes(notes.map(note => 
+              note.id === id ? { ...note, deleted: true } : note
+            ));
           }
         }
       ]
@@ -266,17 +246,10 @@ export default function NotesApp() {
         </TouchableOpacity>
         
         <Text style={[styles.heading, appStyles.heading]}>
-          {archivedNotes ? "Archived Notes" : "Notes"}
+          Notes
         </Text>
         
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => setArchivedNotes(!archivedNotes)} style={styles.headerButton}>
-            <Ionicons
-              name={archivedNotes ? "folder-open" : "archive-outline"}
-              size={24}
-              color={darkMode ? "white" : "black"}
-            />
-          </TouchableOpacity>
           <Switch
             value={darkMode}
             onValueChange={() => setDarkMode(!darkMode)}
@@ -384,14 +357,12 @@ export default function NotesApp() {
       />
 
       {/* Floating Action Button */}
-      {!archivedNotes && (
-        <TouchableOpacity
-          style={[styles.fab, appStyles.fab]}
-          onPress={() => setModalVisible(true)}
-        >
-          <Ionicons name="add" size={28} color="white" />
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={[styles.fab, appStyles.fab]}
+        onPress={() => setModalVisible(true)}
+      >
+        <Ionicons name="add" size={28} color="white" />
+      </TouchableOpacity>
 
       {/* Modal for Adding/Editing Notes */}
       <Modal
@@ -556,6 +527,228 @@ export default function NotesApp() {
   );
 }
 
+// Deleted Notes Screen Component
+function DeletedNotesScreen({ 
+  notes, 
+  setNotes, 
+  darkMode, 
+  setDarkMode 
+}) {
+  // Filter only deleted notes
+  const deletedNotes = notes.filter(note => note.deleted);
+
+  // Restore a deleted note
+  const restoreNote = (id) => {
+    setNotes(notes.map(note => 
+      note.id === id ? { ...note, deleted: false } : note
+    ));
+  };
+
+  // Permanently delete a note
+  const permanentDeleteNote = (id) => {
+    Alert.alert(
+      "Permanently Delete Note",
+      "Are you sure you want to permanently delete this note? This action cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Delete", 
+          style: "destructive",
+          onPress: () => {
+            setNotes(notes.filter(note => note.id !== id));
+          }
+        }
+      ]
+    );
+  };
+
+  // Render deleted note item
+  const renderDeletedNoteItem = ({ item }) => (
+    <View style={styles.noteItemContainer}>
+      <View style={[styles.noteCard, darkMode ? styles.darkNoteCard : styles.lightNoteCard]}>
+        <View style={styles.noteHeader}>
+          <Text style={[styles.noteTitle, darkMode ? styles.darkText : styles.lightText]}>
+            {item.title}
+          </Text>
+        </View>
+        
+        <View style={styles.noteContentPreview}>
+          <Text style={[styles.noteContent, darkMode ? styles.darkSecondaryText : styles.lightSecondaryText]}>
+            {item.content.substring(0, 60)}...
+          </Text>
+        </View>
+        
+        <View style={styles.tagsContainer}>
+          <Text style={[styles.categoryText, darkMode ? styles.darkSecondaryText : styles.lightSecondaryText]}>
+            {item.category}
+          </Text>
+          {item.tags.map((tag, index) => (
+            <View key={index} style={[styles.tag, darkMode ? styles.darkTag : styles.lightTag]}>
+              <Text style={[styles.tagText, darkMode ? styles.darkTagText : styles.lightTagText]}>
+                {tag}
+              </Text>
+            </View>
+          ))}
+        </View>
+        
+        <View style={styles.noteActions}>
+          <TouchableOpacity onPress={() => restoreNote(item.id)}>
+            <Ionicons 
+              name="arrow-undo-outline" 
+              size={20} 
+              color={darkMode ? "#aaa" : "#555"} 
+            />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => permanentDeleteNote(item.id)}>
+            <Ionicons 
+              name="trash-outline" 
+              size={20} 
+              color={darkMode ? "#ff3b30" : "#ff3b30"} 
+            />
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
+  const appStyles = darkMode ? styles.dark : styles.light;
+
+  return (
+    <SafeAreaView style={[styles.container, appStyles.container]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={[styles.heading, appStyles.heading]}>
+          Deleted Notes
+        </Text>
+        
+        <View style={styles.headerRight}>
+          <Switch
+            value={darkMode}
+            onValueChange={() => setDarkMode(!darkMode)}
+            thumbColor={darkMode ? "#f57c00" : "#aaa"}
+            trackColor={{ true: "#444", false: "#ddd" }}
+          />
+        </View>
+      </View>
+
+      {/* Deleted Notes List */}
+      <FlatList
+        data={deletedNotes}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.notesList}
+        ListEmptyComponent={
+          <View style={styles.notFoundContainer}>
+            <Text style={[styles.notFoundText, appStyles.notFoundText]}>
+              No deleted notes found
+            </Text>
+          </View>
+        }
+        renderItem={renderDeletedNoteItem}
+      />
+    </SafeAreaView>
+  );
+}
+
+// Main App Component with Tab Navigation
+export default function NotesApp() {
+  const [notes, setNotes] = useState([
+    { 
+      id: "1", 
+      title: "The Benefits of Meditation", 
+      content: "Meditation is a practice that offers numerous benefits...", 
+      tags: ["Wellness", "Health"], 
+      category: "Personal",
+      pinned: false,
+      archived: false,
+      deleted: false
+    },
+    { 
+      id: "2", 
+      title: "The Importance of Goals", 
+      content: "Setting goals is key to achieving success in any area of life...", 
+      tags: ["Productivity", "Success"], 
+      category: "Work",
+      pinned: true,
+      archived: false,
+      deleted: false
+    },
+    { 
+      id: "3", 
+      title: "The History of Coffee", 
+      content: "Coffee is one of the most popular beverages worldwide with a rich history...", 
+      tags: ["History", "Food"], 
+      category: "Research",
+      pinned: false,
+      archived: false,
+      deleted: false
+    },
+    { 
+      id: "4", 
+      title: "Deleted Note Example", 
+      content: "This note has been deleted...", 
+      tags: ["Example"], 
+      category: "Personal",
+      pinned: false,
+      archived: false,
+      deleted: true
+    },
+  ]);
+
+  const [darkMode, setDarkMode] = useState(true);
+
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <Tab.Navigator
+          screenOptions={({ route }) => ({
+            tabBarIcon: ({ focused, color, size }) => {
+              let iconName;
+
+              if (route.name === 'Notes') {
+                iconName = focused ? 'document-text' : 'document-text-outline';
+              } else if (route.name === 'Deleted Notes') {
+                iconName = focused ? 'trash' : 'trash-outline';
+              }
+
+              return <Ionicons name={iconName} size={size} color={color} />;
+            },
+            tabBarActiveTintColor: '#f57c00',
+            tabBarInactiveTintColor: 'gray',
+            tabBarStyle: {
+              backgroundColor: '#1e1e1e',
+              borderTopWidth: 0,
+            },
+            headerShown: false,
+          })}
+        >
+          <Tab.Screen name="Notes">
+            {() => (
+              <NotesScreen 
+                notes={notes} 
+                setNotes={setNotes} 
+                darkMode={darkMode} 
+                setDarkMode={setDarkMode} 
+              />
+            )}
+          </Tab.Screen>
+          <Tab.Screen name="Deleted Notes">
+            {() => (
+              <DeletedNotesScreen 
+                notes={notes} 
+                setNotes={setNotes} 
+                darkMode={darkMode} 
+                setDarkMode={setDarkMode} 
+              />
+            )}
+          </Tab.Screen>
+        </Tab.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
+  );
+}
+
+
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -565,7 +758,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     marginHorizontal: 20,
-    marginTop: 30,
+    marginTop: 20,
     marginBottom: 10,
   },
   headerRight: {
@@ -583,8 +776,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginHorizontal: 20,
-    marginBottom: 20,
-    marginTop: 10,
+    marginBottom: 10,
   },
   searchBar: {
     flex: 1,
@@ -595,8 +787,7 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     padding: 10,
-    borderRadius: 50,
-    backgroundColor: "#f57c00",
+    borderRadius: 10,
   },
   filterScrollView: {
     marginHorizontal: 10,
@@ -608,7 +799,6 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     marginRight: 10,
-
   },
   activeFilterChip: {
     backgroundColor: "#f57c00",
@@ -625,7 +815,7 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   noteItemContainer: {
-    marginTop: 14,
+    marginBottom: 10,
   },
   noteCard: {
     padding: 15,
@@ -635,10 +825,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 5,
   },
   noteTitle: {
-    color: "orange",
     fontSize: 18,
     fontWeight: "bold",
     flex: 1,
@@ -694,8 +883,8 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 50,
-    shadowColor: "#000000ff",
+    elevation: 5,
+    shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
@@ -740,11 +929,9 @@ const styles = StyleSheet.create({
   },
   activeCategoryOption: {
     backgroundColor: "#f57c00",
-    borderColor: "#f57c00",
-    borderWidth: 2,
   },
   activeCategoryOptionText: {
-    color: "#ffffffff",
+    color: "white",
     fontWeight: "bold",
   },
   categoryOptionText: {
