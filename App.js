@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -12,11 +12,14 @@ import {
   Alert,
   ScrollView,
   Pressable,
+  Animated,
+  Easing,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView, SafeAreaProvider } from "react-native-safe-area-context";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { NavigationContainer } from "@react-navigation/native";
+import AuthScreen from "./authScreen"; // Import the AuthScreen component
 
 const { width, height } = Dimensions.get("window");
 const Tab = createBottomTabNavigator();
@@ -26,11 +29,13 @@ function NotesScreen({
   notes, 
   setNotes, 
   darkMode, 
-  setDarkMode 
+  setDarkMode,
+  isModalVisible,
+  setModalVisible,
+  onLogout
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
-  const [isModalVisible, setModalVisible] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [newNoteTitle, setNewNoteTitle] = useState("");
@@ -250,6 +255,16 @@ function NotesScreen({
         </Text>
         
         <View style={styles.headerRight}>
+          <TouchableOpacity 
+            onPress={onLogout} 
+            style={styles.logoutButton}
+          >
+            <Ionicons
+              name="log-out-outline"
+              size={24}
+              color={darkMode ? "white" : "black"}
+            />
+          </TouchableOpacity>
           <Switch
             value={darkMode}
             onValueChange={() => setDarkMode(!darkMode)}
@@ -312,7 +327,7 @@ function NotesScreen({
               styles.filterChip,
               selectedCategory === category ? styles.activeFilterChip : {},
               darkMode ? styles.darkFilterChip : styles.lightFilterChip
-            ]}
+          ]}
             onPress={() => setSelectedCategory(category)}
           >
             <Text style={[
@@ -355,14 +370,6 @@ function NotesScreen({
         }
         renderItem={renderNoteItem}
       />
-
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={[styles.fab, appStyles.fab]}
-        onPress={() => setModalVisible(true)}
-      >
-        <Ionicons name="add" size={28} color="white" />
-      </TouchableOpacity>
 
       {/* Modal for Adding/Editing Notes */}
       <Modal
@@ -532,7 +539,8 @@ function DeletedNotesScreen({
   notes, 
   setNotes, 
   darkMode, 
-  setDarkMode 
+  setDarkMode,
+  onLogout
 }) {
   // Filter only deleted notes
   const deletedNotes = notes.filter(note => note.deleted);
@@ -622,6 +630,16 @@ function DeletedNotesScreen({
         </Text>
         
         <View style={styles.headerRight}>
+          <TouchableOpacity 
+            onPress={onLogout} 
+            style={styles.logoutButton}
+          >
+            <Ionicons
+              name="log-out-outline"
+              size={24}
+              color={darkMode ? "white" : "black"}
+            />
+          </TouchableOpacity>
           <Switch
             value={darkMode}
             onValueChange={() => setDarkMode(!darkMode)}
@@ -649,8 +667,138 @@ function DeletedNotesScreen({
   );
 }
 
+// Custom Tab Bar with Animated Add Button
+function CustomTabBar({ state, descriptors, navigation, darkMode, onAddPress }) {
+  const animation = useRef(new Animated.Value(0)).current;
+
+  const handlePressIn = () => {
+    Animated.timing(animation, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: false,
+      easing: Easing.out(Easing.ease),
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.timing(animation, {
+      toValue: 0,
+      duration: 180,
+      useNativeDriver: false,
+      easing: Easing.out(Easing.ease),
+    }).start();
+  };
+
+  const borderRadius = animation.interpolate({
+    inputRange: [0, 1],
+    outputRange: [30, 60],
+  });
+
+  const backgroundColor = darkMode ? "#333" : "#fff";
+  const activeTintColor = "#f57c00";
+  const inactiveTintColor = darkMode ? "#aaa" : "#888";
+  const 
+  tabBarStyle = {
+    flexDirection: "row",
+    height: 70,
+    backgroundColor,
+    borderTopWidth: 0,
+    alignItems: "center",
+    justifyContent: "space-around",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 10,
+  };
+
+  // Move renderTab OUTSIDE of JSX
+  function renderTab(route, index) {
+    const { options } = descriptors[route.key];
+    const label =
+      options.tabBarLabel !== undefined
+        ? options.tabBarLabel
+        : options.title !== undefined
+        ? options.title
+        : route.name;
+
+    const isFocused = state.index === index;
+
+    let iconName;
+    if (route.name === "Notes") iconName = isFocused ? "document-text" : "document-text-outline";
+    else if (route.name === "Deleted Notes") iconName = isFocused ? "trash" : "trash-outline";
+
+    return (
+      <TouchableOpacity
+        key={route.key}
+        accessibilityRole="button"
+        accessibilityState={isFocused ? { selected: true } : {}}
+        accessibilityLabel={options.tabBarAccessibilityLabel}
+        testID={options.tabBarTestID}
+        onPress={() => navigation.navigate(route.name)}
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          paddingVertical: 10,
+        }}
+        activeOpacity={0.7}
+      >
+        <Ionicons name={iconName} size={26} color={isFocused ? activeTintColor : inactiveTintColor} />
+        <Text style={{ color: isFocused ? activeTintColor : inactiveTintColor, fontSize: 12, marginTop: 2 }}>
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
+  return (
+    <View style={tabBarStyle}>
+      {state.routes.map((route, index) => {
+        // Place Add button between first and second tab
+        if (index === 1) {
+          return (
+            <React.Fragment key="add-btn">
+              <Animated.View
+                style={{
+                  marginHorizontal: 10,
+                  borderRadius,
+                  backgroundColor: activeTintColor,
+                  width: 60,
+                  height: 60,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  top: -20,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.25,
+                  shadowRadius: 3.84,
+                  elevation: 8,
+                }}
+              >
+                <TouchableOpacity
+                  onPress={onAddPress}
+                  onPressIn={handlePressIn}
+                  onPressOut={handlePressOut}
+                  activeOpacity={0.8}
+                  style={{ width: 60, height: 60, justifyContent: "center", alignItems: "center" }}
+                >
+                  <Ionicons name="add" size={32} color="#fff" />
+                </TouchableOpacity>
+              </Animated.View>
+              {renderTab(route, index)}
+            </React.Fragment>
+          );
+        }
+        return renderTab(route, index);
+      })}
+    </View>
+  );
+}
+
 // Main App Component with Tab Navigation
 export default function NotesApp() {
+  const [user, setUser] = useState(null); // Track user authentication
   const [notes, setNotes] = useState([
     { 
       id: "1", 
@@ -693,51 +841,62 @@ export default function NotesApp() {
       deleted: true
     },
   ]);
-
   const [darkMode, setDarkMode] = useState(true);
+  const [isModalVisible, setModalVisible] = useState(false);
 
+  // Pass modal control to NotesScreen
+  const handleAddPress = () => setModalVisible(true);
+
+  // If user is not authenticated, show AuthScreen
+  if (!user) {
+    return (
+      <SafeAreaProvider>
+        <AuthScreen 
+          setUser={setUser} 
+          setDarkMode={setDarkMode} 
+          darkMode={darkMode} 
+        />
+      </SafeAreaProvider>
+    );
+  }
+
+  // If user is authenticated, show the main app
   return (
     <SafeAreaProvider>
       <NavigationContainer>
         <Tab.Navigator
-          screenOptions={({ route }) => ({
-            tabBarIcon: ({ focused, color, size }) => {
-              let iconName;
-
-              if (route.name === 'Notes') {
-                iconName = focused ? 'document-text' : 'document-text-outline';
-              } else if (route.name === 'Deleted Notes') {
-                iconName = focused ? 'trash' : 'trash-outline';
-              }
-
-              return <Ionicons name={iconName} size={size} color={color} />;
-            },
-            tabBarActiveTintColor: '#f57c00',
-            tabBarInactiveTintColor: 'gray',
-            tabBarStyle: {
-              backgroundColor: '#1e1e1e',
-              borderTopWidth: 0,
-            },
+          tabBar={(props) => (
+            <CustomTabBar
+              {...props}
+              darkMode={darkMode}
+              onAddPress={handleAddPress}
+            />
+          )}
+          screenOptions={{
             headerShown: false,
-          })}
+          }}
         >
           <Tab.Screen name="Notes">
             {() => (
-              <NotesScreen 
-                notes={notes} 
-                setNotes={setNotes} 
-                darkMode={darkMode} 
-                setDarkMode={setDarkMode} 
+              <NotesScreen
+                notes={notes}
+                setNotes={setNotes}
+                darkMode={darkMode}
+                setDarkMode={setDarkMode}
+                isModalVisible={isModalVisible}
+                setModalVisible={setModalVisible}
+                onLogout={() => setUser(null)}
               />
             )}
           </Tab.Screen>
           <Tab.Screen name="Deleted Notes">
             {() => (
-              <DeletedNotesScreen 
-                notes={notes} 
-                setNotes={setNotes} 
-                darkMode={darkMode} 
-                setDarkMode={setDarkMode} 
+              <DeletedNotesScreen
+                notes={notes}
+                setNotes={setNotes}
+                darkMode={darkMode}
+                setDarkMode={setDarkMode}
+                onLogout={() => setUser(null)}
               />
             )}
           </Tab.Screen>
@@ -747,8 +906,7 @@ export default function NotesApp() {
   );
 }
 
-
-
+// Main App Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -765,7 +923,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  headerButton: {
+  logoutButton: {
     marginRight: 15,
   },
   heading: {
@@ -784,6 +942,7 @@ const styles = StyleSheet.create({
     padding: 12,
     fontSize: 16,
     marginRight: 10,
+    marginBottom: 14,
   },
   filterButton: {
     padding: 10,
@@ -799,6 +958,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     marginRight: 10,
+    
   },
   activeFilterChip: {
     backgroundColor: "#f57c00",
@@ -813,9 +973,11 @@ const styles = StyleSheet.create({
   notesList: {
     paddingHorizontal: 10,
     paddingBottom: 20,
+    
   },
   noteItemContainer: {
-    marginBottom: 10,
+    marginBottom: 16,
+
   },
   noteCard: {
     padding: 15,
@@ -832,6 +994,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     flex: 1,
     marginRight: 10,
+
   },
   noteContentPreview: {
     marginBottom: 10,
@@ -874,21 +1037,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontStyle: "italic",
   },
-  fab: {
-    position: "absolute",
-    bottom: 20,
-    right: 20,
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
   modalContainer: {
     flex: 1,
     justifyContent: "center",
@@ -928,10 +1076,12 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   activeCategoryOption: {
-    backgroundColor: "#f57c00",
+    // backgroundColor: "#f57c00",
+    borderColor: "#f57c00",
+    borderWidth: 1.5,
   },
   activeCategoryOptionText: {
-    color: "white",
+    color: "orange",
     fontWeight: "bold",
   },
   categoryOptionText: {
@@ -974,7 +1124,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: "#ccc",
+
   },
   filterModalOptionText: {
     fontSize: 16,
@@ -999,7 +1150,7 @@ const styles = StyleSheet.create({
   dark: {
     container: { backgroundColor: "#1e1e1e" },
     heading: { color: "white" },
-    searchBar: { backgroundColor: "#333", color: "white" },
+    searchBar: { backgroundColor: "#000000ff", color: "white" },
     noteCard: { backgroundColor: "#2a2a2a", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5 },
     text: { color: "white" },
     secondaryText: { color: "#aaa" },
@@ -1008,7 +1159,7 @@ const styles = StyleSheet.create({
     input: { backgroundColor: "#444", color: "white" },
     fab: { backgroundColor: "#f57c00" },
     filterChip: { backgroundColor: "#333" },
-    categoryOption: { backgroundColor: "#333" },
+    categoryOption: { backgroundColor: "#000000ff" },
     modal: { backgroundColor: "#2a2a2a" },
     tag: { backgroundColor: "#333" },
     tagText: { color: "#fff" },
@@ -1022,8 +1173,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   darkNoteCard: {
-    backgroundColor: "#2a2a2a",
-    shadowColor: "#000",
+    backgroundColor: "#000000ff",
+    shadowColor: "#2e2e2eff",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
@@ -1066,7 +1217,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#333",
   },
   lightTagText: {
-    color: "#333",
+    color: "#000000ff",
   },
   darkTagText: {
     color: "#fff",
